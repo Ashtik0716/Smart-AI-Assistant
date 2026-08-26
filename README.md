@@ -117,4 +117,3 @@ The app will be available at `http://localhost:5173`, with the API running at `h
 - [x] Configurable audio alerts
 - [x] Study timer & attention score
 - [x] Express + MongoDB backend
-- [ ] Polished dashboard, settings, and history views
