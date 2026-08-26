@@ -118,7 +118,3 @@ The app will be available at `http://localhost:5173`, with the API running at `h
 - [x] Study timer & attention score
 - [x] Express + MongoDB backend
 - [ ] Polished dashboard, settings, and history views
-
-## License
-
-This project is licensed under the [MIT License](LICENSE) — see the `LICENSE` file for details.
