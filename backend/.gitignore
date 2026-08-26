@@ -1,0 +1,4 @@
+node_modules/
+.env
+uploads/sounds/*
+!uploads/sounds/.gitkeep
