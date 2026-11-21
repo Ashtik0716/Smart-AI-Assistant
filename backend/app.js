@@ -4,6 +4,7 @@ const cors = require("cors");
 const sessionRoutes = require("./routes/sessionRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
 const soundRoutes = require("./routes/soundRoutes");
+const authRoutes = require("./routes/authRoutes");
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.use("/uploads", express.static("uploads"));
 app.use("/api/sessions", sessionRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/sounds", soundRoutes);
+app.use("/api/auth", authRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "FocusAI backend is running" });
