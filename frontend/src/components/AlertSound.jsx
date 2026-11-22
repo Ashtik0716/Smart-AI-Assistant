@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { Music, Save, SlidersHorizontal, Square, Upload, Volume2 } from "lucide-react";
-import { uploadSound, getSounds, deleteSound, updateSettings, API_ORIGIN } from "../services/api";
+import { uploadSound, getSounds, deleteSound, updateSettings, fetchSoundBlobUrl } from "../services/api";
 import { createDefaultAlarmUrl } from "../utils/defaultAlarm";
 
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_BYTES = 3 * 1024 * 1024;
 
 export default function AlertSound({ audioRef, onSoundReady, volume, onVolumeChange }) {
   const [fileName, setFileName] = useState(null); // the user's own sound, if they have one
-  const [customUrl, setCustomUrl] = useState(null);
+  const [customUrl, setCustomUrl] = useState(null); // local blob URL for that sound
   const [defaultUrl, setDefaultUrl] = useState(null); // built-in alarm, made in the browser
   const [isPlaying, setIsPlaying] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -27,15 +27,31 @@ export default function AlertSound({ audioRef, onSoundReady, volume, onVolumeCha
 
   // Load the user's saved sound from the server, if there is one.
   useEffect(() => {
+    let cancelled = false;
     getSounds()
-      .then((sounds) => {
-        if (sounds.length > 0) {
-          setFileName(sounds[0].fileName);
-          setCustomUrl(`${API_ORIGIN}${sounds[0].fileUrl}`);
+      .then(async (sounds) => {
+        if (sounds.length === 0 || cancelled) return;
+        const url = await fetchSoundBlobUrl();
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
         }
+        setFileName(sounds[0].fileName);
+        setCustomUrl(url);
       })
-      .catch((err) => setError(err.message));
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  // Free the previous blob URL whenever the sound changes or the panel closes.
+  useEffect(() => {
+    if (!customUrl) return;
+    return () => URL.revokeObjectURL(customUrl);
+  }, [customUrl]);
 
   // Tell the Study page which sound to play when drowsiness is detected.
   useEffect(() => {
@@ -72,14 +88,14 @@ export default function AlertSound({ audioRef, onSoundReady, volume, onVolumeCha
       return;
     }
     if (file.size > MAX_BYTES) {
-      setError("That file is over 10 MB.");
+      setError("That file is over 3 MB.");
       return;
     }
     setUploading(true);
     try {
       const result = await uploadSound(file);
       setFileName(result.fileName);
-      setCustomUrl(`${API_ORIGIN}${result.fileUrl}`);
+      setCustomUrl(URL.createObjectURL(file)); // play from the local copy, no second download
     } catch (err) {
       setError(err.message);
     } finally {
@@ -152,7 +168,7 @@ export default function AlertSound({ audioRef, onSoundReady, volume, onVolumeCha
         >
           <Upload className="mb-1 h-6 w-6 text-mist" aria-hidden="true" />
           <span className="text-sm">{uploading ? "Uploading…" : "Click to upload or drag and drop"}</span>
-          <span className="text-xs text-mist">WAV or MP3, up to 10 MB</span>
+          <span className="text-xs text-mist">WAV or MP3, up to 3 MB</span>
           <input
             type="file"
             accept=".mp3,.wav,audio/mpeg,audio/wav"
@@ -239,7 +255,7 @@ export default function AlertSound({ audioRef, onSoundReady, volume, onVolumeCha
         <p role="alert" className="mt-2 text-sm text-red-400">Couldn’t save. Try again.</p>
       )}
 
-      <audio ref={audioRef} src={activeUrl ?? undefined} crossOrigin="anonymous" />
+      <audio ref={audioRef} src={activeUrl ?? undefined} />
     </section>
   );
 }

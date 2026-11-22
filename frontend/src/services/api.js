@@ -64,4 +64,18 @@ export function uploadSound(file) {
   return request("/sounds", { method: "POST", body: formData });
 }
 export const getSounds = () => request("/sounds");
+
+// The audio endpoint needs your login token, which an <audio> tag can't send.
+// So we download the file with the token and play it from a local blob URL.
+export async function fetchSoundBlobUrl() {
+  const token = getToken();
+  const res = await fetch(`${API_BASE}/sounds/file`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error("Couldn’t load your alarm sound");
+  return URL.createObjectURL(await res.blob());
+}
+
+
 export const deleteSound = (id) => request(`/sounds/${id}`, { method: "DELETE" });
+

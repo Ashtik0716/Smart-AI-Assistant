@@ -1,60 +1,76 @@
-const fs = require("fs/promises");
 const path = require("path");
-const UserSettings = require("../models/UserSettings");
+const UserSound = require("../models/UserSound");
 
-const SOUND_DIR = path.join(process.cwd(), "uploads", "sounds");
-
-// basename() guarantees we can only ever delete files inside SOUND_DIR.
-async function removeFile(fileUrl) {
-  if (!fileUrl) return;
-  try {
-    await fs.unlink(path.join(SOUND_DIR, path.basename(fileUrl)));
-  } catch (err) {
-    if (err.code !== "ENOENT") console.error("Failed to delete sound file:", err.message);
+/**
+ * Looks at the first bytes of the file to decide what it really is, instead of
+ * trusting the file name or the type the browser claims.
+ */
+function sniffAudio(buf) {
+  if (buf.length < 12) return null;
+  if (buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WAVE") {
+    return "audio/wav";
   }
+  if (buf.toString("ascii", 0, 3) === "ID3") return "audio/mpeg"; // MP3 with a tag
+  if (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) return "audio/mpeg"; // raw MP3 frame
+  return null;
 }
 
 exports.uploadSound = async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded" });
   }
-  const fileUrl = `/uploads/sounds/${req.file.filename}`;
+
+  const contentType = sniffAudio(req.file.buffer);
+  if (!contentType) {
+    return res.status(400).json({ message: "That doesn’t look like a valid .mp3 or .wav file" });
+  }
 
   try {
-    // Without { new: true } this returns the document as it was before the update,
-    // so we can delete the previous file instead of leaving it on disk.
-    const previous = await UserSettings.findOneAndUpdate(
+    const fileName = path.basename(req.file.originalname).slice(0, 100);
+    // Upsert replaces the user's previous sound, so there is never more than one.
+    await UserSound.findOneAndUpdate(
       { userId: req.user._id },
-      { $set: { soundFileName: req.file.originalname.slice(0, 100), soundFileUrl: fileUrl } },
+      { $set: { fileName, contentType, data: req.file.buffer } },
       { upsert: true, setDefaultsOnInsert: true }
     );
-    await removeFile(previous?.soundFileUrl);
-    res.status(201).json({ fileName: req.file.originalname.slice(0, 100), fileUrl });
+    res.status(201).json({ fileName });
   } catch (err) {
     console.error(err);
-    await removeFile(fileUrl); // don't leave an orphan if the database write failed
     res.status(500).json({ message: "Failed to save sound" });
   }
 };
 
+// Metadata only. The audio itself comes from getSoundFile.
 exports.getSounds = async (req, res) => {
   try {
-    const settings = await UserSettings.findOne({ userId: req.user._id });
-    if (!settings || !settings.soundFileUrl) return res.json([]);
-    res.json([{ fileName: settings.soundFileName, fileUrl: settings.soundFileUrl }]);
+    const sound = await UserSound.findOne({ userId: req.user._id }).select("fileName");
+    res.json(sound ? [{ fileName: sound.fileName }] : []);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to fetch sound" });
   }
 };
 
+exports.getSoundFile = async (req, res) => {
+  try {
+    const sound = await UserSound.findOne({ userId: req.user._id }).select("+data contentType");
+    if (!sound) return res.status(404).json({ message: "No sound saved" });
+
+    res.set({
+      "Content-Type": sound.contentType, // from our own check, never from the client
+      "Cache-Control": "private, no-cache", // revalidated each time, so a new upload shows up
+      "X-Content-Type-Options": "nosniff",
+    });
+    res.send(sound.data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to load sound" });
+  }
+};
+
 exports.deleteSound = async (req, res) => {
   try {
-    const previous = await UserSettings.findOneAndUpdate(
-      { userId: req.user._id },
-      { $set: { soundFileName: null, soundFileUrl: null } }
-    );
-    await removeFile(previous?.soundFileUrl);
+    await UserSound.deleteOne({ userId: req.user._id });
     res.json({ message: "Sound removed" });
   } catch (err) {
     console.error(err);

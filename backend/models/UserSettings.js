@@ -8,8 +8,6 @@ const userSettingsSchema = new mongoose.Schema({
   alertVolume: { type: Number, default: 0.8, min: 0, max: 1 },
   alertsEnabled: { type: Boolean, default: true },
   headPoseEnabled: { type: Boolean, default: false },
-  soundFileName: { type: String, default: null },
-  soundFileUrl: { type: String, default: null },
 });
 
 module.exports = mongoose.model("UserSettings", userSettingsSchema);

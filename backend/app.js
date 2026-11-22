@@ -16,7 +16,6 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use("/uploads", express.static("uploads"));
 
 // General limit for the whole API; the auth routes add a stricter one on top.
 app.use(
