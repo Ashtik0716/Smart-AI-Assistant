@@ -102,13 +102,16 @@ export default function Camera() {
   const trackedMs = Math.max(elapsedMs - noFaceMs, 0);
   const attentionScore = trackedMs > 0 ? Math.round((attentiveMs / trackedMs) * 100) : 100;
 
-  const handleStartSession = () => {
+  const handleStartSession = async () => {
+    if (!cameraActive) {
+      const ok = await startCamera();
+      if (!ok) return; // the reason is shown in the camera panel
+    }
     setElapsedMs(0);
     setDrowsyMs(0);
     setNoFaceMs(0);
     setAlertCount(0);
     setSessionActive(true);
-    if (!cameraActive) startCamera();
   };
 
   const handleStopSession = async () => {
@@ -146,6 +149,7 @@ export default function Camera() {
   const sessionNote = sessionActive ? "Session running" : "Camera on, session not started";
   const chip = (() => {
     if (status === "error") return { tone: "bad", title: "Camera problem", detail: "Check camera permission" };
+    if (status === "requesting") return { tone: "warn", title: "Waiting for the camera", detail: "Allow access if your browser asks" };
     if (!cameraActive) return { tone: "ok", title: "Ready", detail: "Camera is off" };
     if (modelStatus === "loading") return { tone: "warn", title: "Loading AI model", detail: "This takes a few seconds" };
     if (modelStatus === "error") return { tone: "bad", title: "Model failed to load", detail: "Refresh the page" };
@@ -191,6 +195,13 @@ export default function Camera() {
                   <>
                     <p className="font-semibold text-red-300">Can’t access the camera</p>
                     <p className="text-sm text-mist">{error}</p>
+                  </>
+                ) : status === "requesting" ? (
+                  <>
+                    <p className="font-semibold">Waiting for the browser…</p>
+                    <p className="text-sm text-mist">
+                      Choose Allow if a permission prompt appears. If nothing appears, check the camera icon in the address bar.
+                    </p>
                   </>
                 ) : (
                   <>
@@ -247,20 +258,6 @@ export default function Camera() {
               <span className="text-2xl font-semibold">{drowsyEventCount}</span>
             </div>
           </div>
-        )}
-
-        {!focus && (
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {FEATURES.map(({ icon: Icon, title, text, tone }) => (
-              <li key={title} className="panel p-4">
-                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tone}`}>
-                  <Icon className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <h2 className="mt-3 text-sm font-semibold">{title}</h2>
-                <p className="mt-1 text-sm text-mist">{text}</p>
-              </li>
-            ))}
-          </ul>
         )}
       </section>
 

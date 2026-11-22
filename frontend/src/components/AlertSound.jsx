@@ -1,32 +1,47 @@
 import { useEffect, useState } from "react";
 import { Music, Save, SlidersHorizontal, Square, Upload, Volume2 } from "lucide-react";
 import { uploadSound, getSounds, deleteSound, updateSettings, API_ORIGIN } from "../services/api";
+import { createDefaultAlarmUrl } from "../utils/defaultAlarm";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
 export default function AlertSound({ audioRef, onSoundReady, volume, onVolumeChange }) {
-  const [fileName, setFileName] = useState(null);
-  const [soundUrl, setSoundUrl] = useState(null);
+  const [fileName, setFileName] = useState(null); // the user's own sound, if they have one
+  const [customUrl, setCustomUrl] = useState(null);
+  const [defaultUrl, setDefaultUrl] = useState(null); // built-in alarm, made in the browser
   const [isPlaying, setIsPlaying] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState(null);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
 
-  // Load the sound saved on the server, if there is one.
+  // The sound that actually plays: the user's own, or the built-in alarm.
+  const activeUrl = customUrl ?? defaultUrl;
+
+  // Generate the built-in alarm once, and free it when the component goes away.
+  useEffect(() => {
+    const url = createDefaultAlarmUrl();
+    setDefaultUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, []);
+
+  // Load the user's saved sound from the server, if there is one.
   useEffect(() => {
     getSounds()
       .then((sounds) => {
         if (sounds.length > 0) {
-          const url = `${API_ORIGIN}${sounds[0].fileUrl}`;
           setFileName(sounds[0].fileName);
-          setSoundUrl(url);
-          onSoundReady?.(url);
+          setCustomUrl(`${API_ORIGIN}${sounds[0].fileUrl}`);
         }
       })
       .catch((err) => setError(err.message));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Tell the Study page which sound to play when drowsiness is detected.
+  useEffect(() => {
+    if (activeUrl) onSoundReady?.(activeUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeUrl]);
 
   // Track playback so the Stop button appears for test sounds and real alarms alike.
   useEffect(() => {
@@ -42,12 +57,12 @@ export default function AlertSound({ audioRef, onSoundReady, volume, onVolumeCha
       audio.removeEventListener("pause", off);
       audio.removeEventListener("ended", off);
     };
-  }, [audioRef, soundUrl]);
+  }, [audioRef, activeUrl]);
 
   // Keep the slider and the audio element in step.
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume;
-  }, [audioRef, volume, soundUrl]);
+  }, [audioRef, volume, activeUrl]);
 
   const handleFile = async (file) => {
     if (!file) return;
@@ -63,10 +78,8 @@ export default function AlertSound({ audioRef, onSoundReady, volume, onVolumeCha
     setUploading(true);
     try {
       const result = await uploadSound(file);
-      const url = `${API_ORIGIN}${result.fileUrl}`;
       setFileName(result.fileName);
-      setSoundUrl(url);
-      onSoundReady?.(url);
+      setCustomUrl(`${API_ORIGIN}${result.fileUrl}`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -76,7 +89,7 @@ export default function AlertSound({ audioRef, onSoundReady, volume, onVolumeCha
 
   const handleTest = () => {
     const audio = audioRef.current;
-    if (!audio || !soundUrl) return;
+    if (!audio || !activeUrl) return;
     audio.volume = volume;
     audio.currentTime = 0;
     audio.play().catch(() => setError("Couldn’t play the sound."));
@@ -89,14 +102,14 @@ export default function AlertSound({ audioRef, onSoundReady, volume, onVolumeCha
     audio.currentTime = 0;
   };
 
+  // Removing your own sound switches back to the built-in alarm.
   const handleRemove = async () => {
     setError(null);
     try {
       await deleteSound("current");
       handleStop();
       setFileName(null);
-      setSoundUrl(null);
-      onSoundReady?.(null);
+      setCustomUrl(null);
     } catch (err) {
       setError(err.message);
     }
@@ -160,13 +173,18 @@ export default function AlertSound({ audioRef, onSoundReady, volume, onVolumeCha
           Selected sound
         </h3>
         <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-line bg-ink-800 px-4 py-3 text-sm">
-          <span className={`truncate ${fileName ? "text-white" : "text-mist"}`}>{fileName ?? "None selected"}</span>
-          {fileName && (
+          <span className="truncate">{fileName ?? "Default alarm"}</span>
+          {fileName ? (
             <button onClick={handleRemove} className="shrink-0 text-xs font-medium text-red-400 hover:text-red-300">
               Remove
             </button>
+          ) : (
+            <span className="shrink-0 rounded-full bg-ink-700 px-2 py-0.5 text-xs text-mist">Built in</span>
           )}
         </div>
+        {!fileName && (
+          <p className="mt-2 text-xs text-mist">FocusAI uses this alarm until you upload your own.</p>
+        )}
       </div>
 
       <div className="mt-6">
@@ -202,7 +220,7 @@ export default function AlertSound({ audioRef, onSoundReady, volume, onVolumeCha
       <div className={`${isPlaying ? "mt-3" : "mt-6"} grid grid-cols-2 gap-3`}>
         <button
           onClick={handleTest}
-          disabled={!soundUrl || isPlaying}
+          disabled={!activeUrl || isPlaying}
           className="flex items-center justify-center gap-2 rounded-xl border border-line bg-ink-800 px-3 py-3 text-sm font-medium transition hover:border-brand/60 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Volume2 className="h-4 w-4" aria-hidden="true" />
@@ -221,7 +239,7 @@ export default function AlertSound({ audioRef, onSoundReady, volume, onVolumeCha
         <p role="alert" className="mt-2 text-sm text-red-400">Couldn’t save. Try again.</p>
       )}
 
-      <audio ref={audioRef} src={soundUrl ?? undefined} crossOrigin="anonymous" />
+      <audio ref={audioRef} src={activeUrl ?? undefined} crossOrigin="anonymous" />
     </section>
   );
 }
