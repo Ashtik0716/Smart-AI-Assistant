@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getSessions, deleteSession } from "../services/api";
 import { formatDuration, formatDate, scoreTone } from "../utils/format";
+import AttentionChart from "../components/AttentionChart";
 
 export default function History() {
   const [sessions, setSessions] = useState([]);
@@ -67,7 +68,7 @@ export default function History() {
               <p className={`mt-1 text-2xl font-bold ${scoreTone(avgAttention)}`}>{avgAttention}%</p>
             </div>
           </div>
-
+          <AttentionChart sessions={sessions} />
           <div className="panel mt-4 overflow-x-auto p-2 sm:p-4">
             <table className="w-full border-collapse text-sm">
               <thead>
