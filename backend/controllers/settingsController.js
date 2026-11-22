@@ -13,7 +13,7 @@ exports.getSettings = async (req, res) => {
     const settings = await UserSettings.findOneAndUpdate(
       { userId: req.user._id },
       { $setOnInsert: { userId: req.user._id } },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      { returnDocument: "after", upsert: true, setDefaultsOnInsert: true }
     );
     res.json(settings);
   } catch (err) {
@@ -27,7 +27,7 @@ exports.updateSettings = async (req, res) => {
     const settings = await UserSettings.findOneAndUpdate(
       { userId: req.user._id },
       { $set: pick(req.body, EDITABLE_FIELDS) },
-      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+      { returnDocument: "after", upsert: true, runValidators: true, setDefaultsOnInsert: true }
     );
     res.json(settings);
   } catch (err) {
