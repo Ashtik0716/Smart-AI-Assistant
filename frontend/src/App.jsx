@@ -18,7 +18,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/" element={<Home />} />
-<Route path="/study" element={<Camera />} />
+              <Route path="/study" element={<Camera />} />
               <Route path="/history" element={<History />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
