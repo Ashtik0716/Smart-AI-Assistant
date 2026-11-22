@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
+import { Brain } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+
+const inputClass =
+  "w-full rounded-xl border border-line bg-ink-800 px-3 py-2.5 text-sm text-white placeholder:text-mist focus:outline-none focus:ring-2 focus:ring-brand";
 
 export default function Login() {
   const { user, login, register, googleLogin } = useAuth();
   const location = useLocation();
-  const redirectTo = location.state?.from || "/study";
+  const redirectTo = location.state?.from || "/";
 
   const [mode, setMode] = useState("login"); // "login" | "register"
   const [form, setForm] = useState({ name: "", email: "", password: "" });
@@ -32,18 +36,26 @@ export default function Login() {
     }
   };
 
-  const inputClass =
-    "w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300";
-
   return (
-    <div className="max-w-sm mx-auto px-4">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col gap-4">
-        <h2 className="text-xl font-bold text-gray-800 text-center">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 py-10">
+      <div className="flex items-center gap-3">
+        <span className="flex h-11 w-11 items-center justify-center rounded-full border border-brand/40 bg-brand/10">
+          <Brain className="h-6 w-6 text-brand" aria-hidden="true" />
+        </span>
+        <span className="text-2xl font-extrabold">
+          Focus<span className="text-brand">AI</span>
+        </span>
+      </div>
+
+      <div className="panel flex w-full max-w-sm flex-col gap-4 p-6">
+        <h1 className="text-center text-xl font-bold">
           {mode === "login" ? "Welcome back" : "Create your account"}
-        </h2>
+        </h1>
 
         <div className="flex justify-center">
           <GoogleLogin
+            theme="filled_black"
+            text={mode === "login" ? "signin_with" : "signup_with"}
             onSuccess={async (res) => {
               setError(null);
               try {
@@ -56,10 +68,10 @@ export default function Login() {
           />
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-gray-400">
-          <div className="flex-1 h-px bg-gray-200" />
+        <div className="flex items-center gap-3 text-xs text-mist">
+          <div className="h-px flex-1 bg-line" />
           or
-          <div className="flex-1 h-px bg-gray-200" />
+          <div className="h-px flex-1 bg-line" />
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
@@ -67,6 +79,7 @@ export default function Login() {
             <input
               type="text"
               placeholder="Name"
+              aria-label="Name"
               value={form.name}
               onChange={update("name")}
               required
@@ -78,6 +91,7 @@ export default function Login() {
           <input
             type="email"
             placeholder="Email"
+            aria-label="Email"
             value={form.email}
             onChange={update("email")}
             required
@@ -87,6 +101,7 @@ export default function Login() {
           <input
             type="password"
             placeholder="Password (8+ characters)"
+            aria-label="Password"
             value={form.password}
             onChange={update("password")}
             required
@@ -95,14 +110,18 @@ export default function Login() {
             className={inputClass}
           />
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-red-400">
+              {error}
+            </p>
+          )}
 
           <button
             type="submit"
             disabled={submitting}
-            className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-gray-300 transition"
+            className="rounded-xl bg-brand px-4 py-2.5 font-semibold text-white transition hover:bg-blue-500 disabled:bg-ink-700 disabled:text-mist"
           >
-            {submitting ? "Please wait..." : mode === "login" ? "Sign in" : "Create account"}
+            {submitting ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
           </button>
         </form>
 
@@ -112,7 +131,7 @@ export default function Login() {
             setMode(mode === "login" ? "register" : "login");
             setError(null);
           }}
-          className="text-sm text-indigo-600 hover:underline"
+          className="text-sm text-brand hover:underline"
         >
           {mode === "login" ? "New here? Create an account" : "Already have an account? Sign in"}
         </button>

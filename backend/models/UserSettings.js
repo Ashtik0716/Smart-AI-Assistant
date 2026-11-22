@@ -1,14 +1,11 @@
 const mongoose = require("mongoose");
 
-/**
- * Single-user settings document — since this app has no auth/login
- * system, we store exactly ONE settings document and always
- * upsert/read that same one (see settingsController.js).
- */
+// One settings document per user. The unique index enforces that.
 const userSettingsSchema = new mongoose.Schema({
-  earThreshold: { type: Number, default: 0.5 },
-  drowsyDurationMs: { type: Number, default: 2000 },
-  alertVolume: { type: Number, default: 0.8 },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, unique: true },
+  earThreshold: { type: Number, default: 0.5, min: 0.1, max: 0.9 },
+  drowsyDurationMs: { type: Number, default: 2000, min: 500, max: 10000 },
+  alertVolume: { type: Number, default: 0.8, min: 0, max: 1 },
   alertsEnabled: { type: Boolean, default: true },
   headPoseEnabled: { type: Boolean, default: false },
   soundFileName: { type: String, default: null },

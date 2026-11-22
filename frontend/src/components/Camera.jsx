@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
+import { Camera as CameraIcon, Play, Square } from "lucide-react";
 import { useCamera } from "../hooks/useCamera";
 import { useFaceLandmarker } from "../hooks/useFaceLandmarker";
 import { useDrowsiness } from "../hooks/useDrowsiness";
-import EyeStatus from "./EyeStatus";
 import AlertSound from "./AlertSound";
 import StudyTimer from "./StudyTimer";
 import AttentionScore from "./AttentionScore";
@@ -17,6 +17,15 @@ const FALLBACK_SETTINGS = {
   headPoseEnabled: false,
 };
 
+const RING = {
+  [STATUS.ATTENTIVE]: "border-emerald-400/70",
+  [STATUS.POSSIBLY_TIRED]: "border-amber-400",
+  [STATUS.DROWSY]: "border-red-500",
+  [STATUS.NO_FACE]: "border-slate-500",
+};
+
+const DOT = { ok: "bg-emerald-400", warn: "bg-amber-400", bad: "bg-red-500" };
+
 export default function Camera() {
   const { videoRef, status, error, startCamera, stopCamera } = useCamera();
   const cameraActive = status === "active";
@@ -26,7 +35,6 @@ export default function Camera() {
   const [alertCount, setAlertCount] = useState(0);
   const sharedAudioRef = useRef(null);
 
-  // Settings must be declared BEFORE anything that reads detectionSettings
   const [detectionSettings, setDetectionSettings] = useState(FALLBACK_SETTINGS);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
@@ -38,7 +46,7 @@ export default function Camera() {
           drowsyDurationMs: data.drowsyDurationMs,
           alertVolume: data.alertVolume,
           alertsEnabled: data.alertsEnabled,
-          headPoseEnabled: data.headPoseEnabled, // NEW
+          headPoseEnabled: data.headPoseEnabled,
         });
         setVolume(data.alertVolume);
       })
@@ -46,18 +54,21 @@ export default function Camera() {
       .finally(() => setSettingsLoaded(true));
   }, []);
 
-  const { modelStatus, faceDetected, ear, closure, headPitch } = useFaceLandmarker(videoRef, cameraActive && settingsLoaded);
+  const { modelStatus, faceDetected, closure, headPitch } = useFaceLandmarker(
+    videoRef,
+    cameraActive && settingsLoaded
+  );
 
-const { status: drowsinessStatus, drowsyEventCount, isDrowsy } = useDrowsiness(
-  closure,
-  {
-    earThreshold: detectionSettings.earThreshold,
-    drowsyDurationMs: detectionSettings.drowsyDurationMs,
-    enabled: detectionSettings.alertsEnabled,
-    headPoseEnabled: detectionSettings.headPoseEnabled, // NEW
-  },
-  headPitch // NEW
-);
+  const { status: drowsinessStatus, drowsyEventCount, isDrowsy } = useDrowsiness(
+    closure,
+    {
+      earThreshold: detectionSettings.earThreshold,
+      drowsyDurationMs: detectionSettings.drowsyDurationMs,
+      enabled: detectionSettings.alertsEnabled,
+      headPoseEnabled: detectionSettings.headPoseEnabled,
+    },
+    headPitch
+  );
 
   const displayStatus = !faceDetected ? STATUS.NO_FACE : drowsinessStatus;
 
@@ -65,16 +76,15 @@ const { status: drowsinessStatus, drowsyEventCount, isDrowsy } = useDrowsiness(
   const [sessionActive, setSessionActive] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [drowsyMs, setDrowsyMs] = useState(0);
+  const [noFaceMs, setNoFaceMs] = useState(0);
   const tickRef = useRef(null);
   const lastTickRef = useRef(null);
-  const [noFaceMs, setNoFaceMs] = useState(0);
 
   useEffect(() => {
     if (!sessionActive) {
       if (tickRef.current) clearInterval(tickRef.current);
       return;
     }
-
     lastTickRef.current = performance.now();
     tickRef.current = setInterval(() => {
       const now = performance.now();
@@ -82,15 +92,9 @@ const { status: drowsinessStatus, drowsyEventCount, isDrowsy } = useDrowsiness(
       lastTickRef.current = now;
 
       setElapsedMs((prev) => prev + delta);
-
-      if (isDrowsy) {
-        setDrowsyMs((prev) => prev + delta);
-      }
-      if (!faceDetected) {
-        setNoFaceMs((prev) => prev + delta);
-      }
+      if (isDrowsy) setDrowsyMs((prev) => prev + delta);
+      if (!faceDetected) setNoFaceMs((prev) => prev + delta);
     }, 500);
-
     return () => clearInterval(tickRef.current);
   }, [sessionActive, isDrowsy, faceDetected]);
 
@@ -102,6 +106,7 @@ const { status: drowsinessStatus, drowsyEventCount, isDrowsy } = useDrowsiness(
     setElapsedMs(0);
     setDrowsyMs(0);
     setNoFaceMs(0);
+    setAlertCount(0);
     setSessionActive(true);
     if (!cameraActive) startCamera();
   };
@@ -136,96 +141,137 @@ const { status: drowsinessStatus, drowsyEventCount, isDrowsy } = useDrowsiness(
     setWasDrowsy(isDrowsy);
   }, [sessionActive, detectionSettings.alertsEnabled, isDrowsy, wasDrowsy, alertUrl, volume]);
 
-      const statusBorderColor = {
-    [STATUS.ATTENTIVE]: "border-green-500",
-    [STATUS.POSSIBLY_TIRED]: "border-yellow-500",
-    [STATUS.DROWSY]: "border-red-500",
-    [STATUS.NO_FACE]: "border-gray-300",
-  }[displayStatus] ?? "border-gray-300";
+  // --- What the status chip and the video border say ---
+  const monitoring = cameraActive && modelStatus === "ready";
+  const sessionNote = sessionActive ? "Session running" : "Camera on, session not started";
+  const chip = (() => {
+    if (status === "error") return { tone: "bad", title: "Camera problem", detail: "Check camera permission" };
+    if (!cameraActive) return { tone: "ok", title: "Ready", detail: "Camera is off" };
+    if (modelStatus === "loading") return { tone: "warn", title: "Loading AI model", detail: "This takes a few seconds" };
+    if (modelStatus === "error") return { tone: "bad", title: "Model failed to load", detail: "Refresh the page" };
+    return {
+      [STATUS.ATTENTIVE]: { tone: "ok", title: "Attentive", detail: sessionNote },
+      [STATUS.POSSIBLY_TIRED]: { tone: "warn", title: "Possibly tired", detail: sessionNote },
+      [STATUS.DROWSY]: { tone: "bad", title: "Drowsiness detected", detail: sessionNote },
+      [STATUS.NO_FACE]: { tone: "warn", title: "No face detected", detail: sessionNote },
+    }[displayStatus];
+  })();
+  const ring = monitoring ? RING[displayStatus] : "border-line";
 
   return (
-    <div className="w-full max-w-3xl mx-auto px-4">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col items-center gap-5">
-        {/* Video */}
-        <div
-          className={`relative w-full max-w-[640px] aspect-video bg-black rounded-xl overflow-hidden border-4 transition-colors duration-300 ${
-            cameraActive ? statusBorderColor : "border-gray-200"
-          }`}
-        >
-          <video ref={videoRef} className="w-full h-full object-cover -scale-x-100" playsInline muted />
-          {status !== "active" && (
-            <div className="absolute inset-0 flex items-center justify-center text-white/70 text-sm">
-              {status === "error" ? error : "Camera not started"}
+    <div className="mx-auto grid max-w-[1400px] gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section className="flex min-w-0 flex-col gap-5">
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Study session</h1>
+            <p className="mt-2 max-w-xl text-mist">
+              Keep this tab open while you study. FocusAI alerts you if your eyes stay closed.
+            </p>
+          </div>
+
+          <div className="panel flex items-center gap-3 px-4 py-3" role="status" aria-live="polite">
+            <span className={`h-2.5 w-2.5 rounded-full ${DOT[chip.tone]}`} aria-hidden="true" />
+            <div className="leading-tight">
+              <p className="text-sm font-semibold">{chip.title}</p>
+              <p className="text-xs text-mist">{chip.detail}</p>
             </div>
-          )}
-          {cameraActive && (
-            <div className="absolute top-2 left-2 px-2 py-1 rounded bg-black/60 text-xs text-white">
-              {modelStatus === "loading" && "Loading AI model..."}
-              {modelStatus === "error" && "Model failed to load"}
-              {modelStatus === "ready" && !faceDetected && "No face detected"}
-              {modelStatus === "ready" && faceDetected && ear && <>EAR: {ear.avgEAR.toFixed(3)}</>}
-            </div>
-          )}
+          </div>
+        </header>
+
+        <div className="panel p-3 sm:p-4">
+          <div className={`relative aspect-video overflow-hidden rounded-xl border-2 bg-black transition-colors duration-300 ${ring}`}>
+            <video ref={videoRef} className="h-full w-full -scale-x-100 object-cover" playsInline muted />
+
+            {!cameraActive && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
+                <span className="mb-1 flex h-16 w-16 items-center justify-center rounded-full border border-line bg-ink-800">
+                  <CameraIcon className="h-7 w-7 text-mist" aria-hidden="true" />
+                </span>
+                {status === "error" ? (
+                  <>
+                    <p className="font-semibold text-red-300">Can’t access the camera</p>
+                    <p className="text-sm text-mist">{error}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-semibold">Camera not started</p>
+                    <p className="text-sm text-mist">Click &ldquo;Start Study&rdquo; to begin monitoring</p>
+                  </>
+                )}
+              </div>
+            )}
+
+            {monitoring && closure && (
+              <div className="absolute left-3 top-3 rounded-md bg-black/60 px-2 py-1 text-xs text-slate-200">
+                Eye closure {Math.round(closure.avgClosure * 100)}%
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+            {!sessionActive ? (
+              <button
+                onClick={handleStartSession}
+                className="inline-flex items-center gap-2 rounded-full bg-linear-to-b from-emerald-400 to-emerald-600 px-7 py-3 font-semibold text-white shadow-lg shadow-emerald-900/40 transition hover:brightness-110"
+              >
+                <Play className="h-4 w-4 fill-current" aria-hidden="true" />
+                Start Study
+              </button>
+            ) : (
+              <button
+                onClick={handleStopSession}
+                className="inline-flex items-center gap-2 rounded-full bg-linear-to-b from-red-500 to-red-700 px-7 py-3 font-semibold text-white shadow-lg shadow-red-900/40 transition hover:brightness-110"
+              >
+                <Square className="h-4 w-4 fill-current" aria-hidden="true" />
+                Stop Session
+              </button>
+            )}
+            <button
+              onClick={stopCamera}
+              disabled={!cameraActive || sessionActive}
+              title={sessionActive ? "Stop the session first" : undefined}
+              className="inline-flex items-center gap-2 rounded-full border border-line bg-ink-800 px-6 py-3 text-sm font-medium text-mist transition hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-mist"
+            >
+              <Square className="h-4 w-4" aria-hidden="true" />
+              Stop Camera
+            </button>
+          </div>
         </div>
 
-        {/* Status indicator */}
-        {cameraActive && (
-          <div className="flex items-center justify-center">
-            <EyeStatus status={displayStatus} />
-          </div>
-        )}
-
-        {/* Stats row — only while a session is running */}
         {sessionActive && (
-          <div className="w-full grid grid-cols-3 gap-3 py-4 border-y border-gray-100">
-            <div className="flex flex-col items-center">
-              <StudyTimer elapsedMs={elapsedMs} />
-            </div>
-            <div className="flex flex-col items-center border-x border-gray-100">
-              <AttentionScore score={attentionScore} />
-            </div>
-            <div className="flex flex-col items-center">
-              <span className="text-sm text-gray-500">Drowsiness Events</span>
-              <span className="text-2xl font-semibold text-gray-800">{drowsyEventCount}</span>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="panel flex justify-center py-4"><StudyTimer elapsedMs={elapsedMs} /></div>
+            <div className="panel flex justify-center py-4"><AttentionScore score={attentionScore} /></div>
+            <div className="panel flex flex-col items-center py-4">
+              <span className="text-sm text-gray-500">Drowsiness events</span>
+              <span className="text-2xl font-semibold">{drowsyEventCount}</span>
             </div>
           </div>
         )}
 
-        {/* Primary controls */}
-        <div className="flex gap-3 w-full justify-center">
-          {!sessionActive ? (
-            <button
-              onClick={handleStartSession}
-              className="px-8 py-3 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-700 shadow-sm transition"
-            >
-              Start Study
-            </button>
-          ) : (
-            <button
-              onClick={handleStopSession}
-              className="px-8 py-3 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 shadow-sm transition"
-            >
-              Stop
-            </button>
-          )}
-          <button
-            onClick={stopCamera}
-            className="px-4 py-3 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition text-sm"
-          >
-            Stop Camera
-          </button>
-        </div>
-      </div>
+        {!focus && (
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {FEATURES.map(({ icon: Icon, title, text, tone }) => (
+              <li key={title} className="panel p-4">
+                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tone}`}>
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <h2 className="mt-3 text-sm font-semibold">{title}</h2>
+                <p className="mt-1 text-sm text-mist">{text}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
-      {/* Alert sound settings, in its own card below */}
-      <div className="mt-4 flex justify-center">
+      <aside>
         <AlertSound
           audioRef={sharedAudioRef}
           onSoundReady={(url) => setAlertUrl(url)}
           volume={volume}
           onVolumeChange={setVolume}
         />
-      </div>
+      </aside>
     </div>
   );
 }

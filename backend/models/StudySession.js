@@ -1,22 +1,18 @@
 const mongoose = require("mongoose");
 
-/**
- * Represents one completed study session. Mirrors the data Camera.jsx
- * already tracks in React state (elapsedMs, drowsyEventCount, etc.) —
- * we're just persisting a snapshot of it when the user clicks Stop.
- */
 const studySessionSchema = new mongoose.Schema(
   {
-    durationMs: { type: Number, required: true }, // total session length
-    attentiveMs: { type: Number, required: true }, // time spent attentive
-    drowsyMs: { type: Number, required: true }, // time spent drowsy
-    attentionScore: { type: Number, required: true }, // 0-100
-    drowsinessEvents: { type: Number, required: true, default: 0 },
-    alertsPlayed: { type: Number, required: true, default: 0 },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    durationMs: { type: Number, required: true, min: 0 },
+    attentiveMs: { type: Number, required: true, min: 0 },
+    drowsyMs: { type: Number, required: true, min: 0 },
+    attentionScore: { type: Number, required: true, min: 0, max: 100 },
+    drowsinessEvents: { type: Number, required: true, default: 0, min: 0 },
+    alertsPlayed: { type: Number, required: true, default: 0, min: 0 },
     startedAt: { type: Date, required: true },
     endedAt: { type: Date, required: true },
   },
-  { timestamps: true } // adds createdAt/updatedAt automatically
+  { timestamps: true }
 );
 
 module.exports = mongoose.model("StudySession", studySessionSchema);
